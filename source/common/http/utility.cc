@@ -379,11 +379,12 @@ bool Utility::Url::containsFragment() { return (component_bitmap_ & (1 << UcFrag
 
 bool Utility::Url::containsUserinfo() { return (component_bitmap_ & (1 << UcUserinfo)); }
 
-bool Utility::Url::initialize(absl::string_view absolute_url, bool is_connect) {
+bool Utility::Url::initialize(absl::string_view absolute_url, bool is_connect,
+                              bool allow_underscore_in_host) {
   struct http_parser_url u;
   http_parser_url_init(&u);
-  const int result =
-      http_parser_parse_url(absolute_url.data(), absolute_url.length(), is_connect, &u);
+  const int result = http_parser_parse_url_ex(absolute_url.data(), absolute_url.length(),
+                                              is_connect, allow_underscore_in_host, &u);
 
   if (result != 0) {
     return false;
@@ -1656,8 +1657,11 @@ bool Utility::isValidRefererValue(absl::string_view value) {
   // url.initialize uses http_parser_parse_url, which requires
   // a host to be present if there is a schema.
   Utility::Url url;
+  // Browsers send referers for hosts such as "a_b.example.com", which RFC 3986 allows.
+  const bool allow_underscore_in_host = Runtime::runtimeFeatureEnabled(
+      "envoy.reloadable_features.http_allow_underscore_host_in_referer");
 
-  if (url.initialize(value, false)) {
+  if (url.initialize(value, false, allow_underscore_in_host)) {
     return !(url.containsFragment() || url.containsUserinfo());
   }
 

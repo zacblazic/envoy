@@ -95,7 +95,15 @@ enum UrlComponents {
 
 class Url {
 public:
-  bool initialize(absl::string_view absolute_url, bool is_connect_request);
+  /**
+   * @param absolute_url the URL to parse.
+   * @param is_connect_request whether the URL is the authority-form target of a CONNECT request.
+   * @param allow_underscore_in_host whether to accept '_' in a registered host name, which
+   *        RFC 3986 allows but the URL parser rejects by default.
+   * @return true if the URL was parsed successfully.
+   */
+  bool initialize(absl::string_view absolute_url, bool is_connect_request,
+                  bool allow_underscore_in_host = false);
   absl::string_view scheme() const { return scheme_; }
   absl::string_view hostAndPort() const { return host_and_port_; }
   absl::string_view pathAndQueryParams() const { return path_and_query_params_; }

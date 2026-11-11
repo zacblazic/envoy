@@ -2257,7 +2257,8 @@ http_errno_description(enum http_errno err) {
 }
 
 static enum http_host_state
-http_parse_host_char(enum http_host_state s, const char ch) {
+http_parse_host_char(enum http_host_state s, const char ch,
+                     int allow_underscore_in_host) {
   switch(s) {
     case s_http_userinfo:
     case s_http_userinfo_start:
@@ -2275,14 +2276,14 @@ http_parse_host_char(enum http_host_state s, const char ch) {
         return s_http_host_v6_start;
       }
 
-      if (IS_HOST_CHAR(ch)) {
+      if (IS_HOST_CHAR(ch) || (allow_underscore_in_host && ch == '_')) {
         return s_http_host;
       }
 
       break;
 
     case s_http_host:
-      if (IS_HOST_CHAR(ch)) {
+      if (IS_HOST_CHAR(ch) || (allow_underscore_in_host && ch == '_')) {
         return s_http_host;
       }
 
@@ -2339,7 +2340,8 @@ http_parse_host_char(enum http_host_state s, const char ch) {
 }
 
 static int
-http_parse_host(const char * buf, struct http_parser_url *u, int found_at) {
+http_parse_host(const char * buf, struct http_parser_url *u, int found_at,
+                int allow_underscore_in_host) {
   enum http_host_state s;
 
   const char *p;
@@ -2352,7 +2354,8 @@ http_parse_host(const char * buf, struct http_parser_url *u, int found_at) {
   s = found_at ? s_http_userinfo_start : s_http_host_start;
 
   for (p = buf + u->field_data[UF_HOST].off; p < buf + buflen; p++) {
-    enum http_host_state new_s = http_parse_host_char(s, *p);
+    enum http_host_state new_s =
+        http_parse_host_char(s, *p, allow_underscore_in_host);
 
     if (new_s == s_http_host_dead) {
       return 1;
@@ -2425,9 +2428,9 @@ http_parser_url_init(struct http_parser_url *u) {
   memset(u, 0, sizeof(*u));
 }
 
-int
-http_parser_parse_url(const char *buf, size_t buflen, int is_connect,
-                      struct http_parser_url *u)
+static int
+parse_url(const char *buf, size_t buflen, int is_connect,
+          int allow_underscore_in_host, struct http_parser_url *u)
 {
   enum state s;
   const char *p;
@@ -2508,7 +2511,7 @@ http_parser_parse_url(const char *buf, size_t buflen, int is_connect,
   }
 
   if (u->field_set & (1 << UF_HOST)) {
-    if (http_parse_host(buf, u, found_at) != 0) {
+    if (http_parse_host(buf, u, found_at, allow_underscore_in_host) != 0) {
       return 1;
     }
   }
@@ -2546,6 +2549,21 @@ http_parser_parse_url(const char *buf, size_t buflen, int is_connect,
   }
 
   return 0;
+}
+
+int
+http_parser_parse_url(const char *buf, size_t buflen, int is_connect,
+                      struct http_parser_url *u)
+{
+  return parse_url(buf, buflen, is_connect, 0, u);
+}
+
+int
+http_parser_parse_url_ex(const char *buf, size_t buflen, int is_connect,
+                         int allow_underscore_in_host,
+                         struct http_parser_url *u)
+{
+  return parse_url(buf, buflen, is_connect, allow_underscore_in_host, u);
 }
 
 void

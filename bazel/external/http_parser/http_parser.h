@@ -405,6 +405,11 @@ void http_parser_url_init(struct http_parser_url* u);
 int http_parser_parse_url(const char* buf, size_t buflen, int is_connect,
                           struct http_parser_url* u);
 
+/* Like http_parser_parse_url(), but if allow_underscore_in_host is nonzero,
+ * also accept '_' in a registered host name, as RFC 3986 allows. */
+int http_parser_parse_url_ex(const char* buf, size_t buflen, int is_connect,
+                             int allow_underscore_in_host, struct http_parser_url* u);
+
 /* Pause or un-pause the parser; a nonzero value pauses */
 void http_parser_pause(http_parser* parser, int paused);
 

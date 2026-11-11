@@ -347,6 +347,42 @@ TEST_F(ConnectionManagerUtilityTest, AlphaNumCharRefererPassesSanitization) {
             headers.get(Http::CustomHeaders::get().Referer)[0]->value().getStringView());
 }
 
+TEST_F(ConnectionManagerUtilityTest, UnderscoreHostRefererPassesSanitization) {
+  connection_.stream_info_.downstream_connection_info_provider_->setRemoteAddress(
+      std::make_shared<Network::Address::Ipv4Instance>("10.0.0.1"));
+  ON_CALL(config_, useRemoteAddress()).WillByDefault(Return(true));
+  TestRequestHeaderMapImpl headers{{"referer", "https://a_b.example.com/foo?bar=xyz"}};
+  EXPECT_EQ((MutateRequestRet{"10.0.0.1:0", true, Tracing::Reason::NotTraceable}),
+            callMutateRequestHeaders(headers, Protocol::Http2));
+  EXPECT_EQ("https://a_b.example.com/foo?bar=xyz",
+            headers.get(Http::CustomHeaders::get().Referer)[0]->value().getStringView());
+}
+
+TEST_F(ConnectionManagerUtilityTest, RemoveUnderscoreHostRefererIfMultipleEntriesAreFound) {
+  connection_.stream_info_.downstream_connection_info_provider_->setRemoteAddress(
+      std::make_shared<Network::Address::Ipv4Instance>("10.0.0.1"));
+  ON_CALL(config_, useRemoteAddress()).WillByDefault(Return(true));
+  TestRequestHeaderMapImpl headers{{"referer", "https://a_b.example.com/"},
+                                   {"referer", "https://c_d.example.com/"}};
+  ASSERT_EQ(headers.size(), 2);
+  EXPECT_EQ((MutateRequestRet{"10.0.0.1:0", true, Tracing::Reason::NotTraceable}),
+            callMutateRequestHeaders(headers, Protocol::Http2));
+  EXPECT_TRUE(headers.get(Http::CustomHeaders::get().Referer).empty());
+}
+
+TEST_F(ConnectionManagerUtilityTest, RemoveUnderscoreHostRefererWithoutGuard) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.http_allow_underscore_host_in_referer", "false"}});
+  connection_.stream_info_.downstream_connection_info_provider_->setRemoteAddress(
+      std::make_shared<Network::Address::Ipv4Instance>("10.0.0.1"));
+  ON_CALL(config_, useRemoteAddress()).WillByDefault(Return(true));
+  TestRequestHeaderMapImpl headers{{"referer", "https://a_b.example.com/"}};
+  EXPECT_EQ((MutateRequestRet{"10.0.0.1:0", true, Tracing::Reason::NotTraceable}),
+            callMutateRequestHeaders(headers, Protocol::Http2));
+  EXPECT_TRUE(headers.get(Http::CustomHeaders::get().Referer).empty());
+}
+
 TEST_F(ConnectionManagerUtilityTest, ValidPathOnlyRefererPassesSanitization) {
   connection_.stream_info_.downstream_connection_info_provider_->setRemoteAddress(
       std::make_shared<Network::Address::Ipv4Instance>("10.0.0.1"));

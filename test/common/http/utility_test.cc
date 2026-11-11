@@ -1825,6 +1825,25 @@ TEST(Url, ParsingFails) {
   EXPECT_FALSE(url.initialize("http://1.2.3.4:65536/?query=param", false));
 }
 
+TEST(Url, UnderscoreInHost) {
+  Utility::Url url;
+  // Rejected unless explicitly allowed, so existing callers are unchanged.
+  EXPECT_FALSE(url.initialize("https://a_b.example.com/path", false));
+  EXPECT_FALSE(url.initialize("a_b.example.com:443", true));
+
+  ASSERT_TRUE(url.initialize("https://a_b.example.com:8443/path?query=param", false, true));
+  EXPECT_EQ(url.scheme(), "https");
+  EXPECT_EQ(url.hostAndPort(), "a_b.example.com:8443");
+  EXPECT_EQ(url.pathAndQueryParams(), "/path?query=param");
+
+  ASSERT_TRUE(url.initialize("a_b.example.com:443", true, true));
+  EXPECT_EQ(url.hostAndPort(), "a_b.example.com:443");
+
+  // Only '_' is added; other characters are still rejected.
+  EXPECT_FALSE(url.initialize("https://a~b.example.com/", false, true));
+  EXPECT_FALSE(url.initialize("https://a_b.example.com:port/", false, true));
+}
+
 void validateUrl(absl::string_view raw_url, absl::string_view expected_scheme,
                  absl::string_view expected_host_port, absl::string_view expected_path) {
   Utility::Url url;
@@ -2126,6 +2145,27 @@ TEST(Utility, isValidRefererValue) {
       Utility::isValidRefererValue(absl::string_view("http://www.example.com/?foo=bar#fragment")));
   EXPECT_FALSE(Utility::isValidRefererValue(absl::string_view("foo=bar#fragment")));
 };
+
+TEST(Utility, isValidRefererValueUnderscoreHost) {
+  EXPECT_TRUE(Utility::isValidRefererValue("https://a_b.example.com"));
+  EXPECT_TRUE(Utility::isValidRefererValue("https://a_b.example.com/"));
+  EXPECT_TRUE(Utility::isValidRefererValue("https://_a.example.com/"));
+  EXPECT_TRUE(Utility::isValidRefererValue("https://a_b.example.com:8443/"));
+  EXPECT_TRUE(Utility::isValidRefererValue("https://a_b.example.com/foo?bar=xyz"));
+  EXPECT_TRUE(Utility::isValidRefererValue("https://a_b.example.com:8443/foo?bar=xyz"));
+  EXPECT_FALSE(Utility::isValidRefererValue("https://a_b.example.com/foo#fragment"));
+  EXPECT_FALSE(Utility::isValidRefererValue("https://user@a_b.example.com/"));
+  EXPECT_FALSE(Utility::isValidRefererValue("https://a b.example.com/"));
+}
+
+TEST(Utility, isValidRefererValueUnderscoreHostWithoutGuard) {
+  TestScopedRuntime scoped_runtime;
+  scoped_runtime.mergeValues(
+      {{"envoy.reloadable_features.http_allow_underscore_host_in_referer", "false"}});
+  EXPECT_FALSE(Utility::isValidRefererValue("https://a_b.example.com/"));
+  EXPECT_FALSE(Utility::isValidRefererValue("https://a_b.example.com:8443/foo?bar=xyz"));
+  EXPECT_TRUE(Utility::isValidRefererValue("https://example.com/"));
+}
 TEST(HeaderIsValidTest, SchemeIsValid) {
   EXPECT_TRUE(Utility::schemeIsValid("http"));
   EXPECT_TRUE(Utility::schemeIsValid("https"));
